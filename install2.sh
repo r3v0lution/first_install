@@ -58,7 +58,7 @@ EOF
 # Copy git clone from original user to new user and delete old directory.
 sudo cp -r /home/$ORIGINALUSER/first_install ~/first_install
 sudo rm -r /home/$ORIGINALUSER/first_install
-
+sudo chown -R $USERNAME ~/first_install
     # Create marker file
     touch "$MARKER_FILE"
 fi
