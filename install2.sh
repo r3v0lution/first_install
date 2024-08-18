@@ -1,6 +1,8 @@
 #!/bin/bash
 
 
+ORIGINALUSER=$(whoami)
+echo "ORIGINALUSER=$ORIGINALUSER" >> ./config.env
 # Source the .env file which contains the user defined variables
 source ./config.env
 
