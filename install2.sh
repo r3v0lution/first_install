@@ -6,8 +6,8 @@ source ./config.env
 
 clear
 
-# Define the log file
-LOG_FILE="/var/log/setup_script.log"
+# Define marker file
+MARKER_FILE="/tmp/installer_marker"
 
 # Print the variables
 echo "--------------------------------------"
@@ -18,32 +18,19 @@ echo "Configuring hostname as: $HOSTNAME"
 echo "--------------------------------------"
 echo "--------------------------------------"
 
-# Prompt for confirmation before proceeding
-read -p "Do you want to continue with the setup? (yes/no): " CONFIRMATION
+# Check if script has already run some parts
+if [[ -f "$MARKER_FILE" ]]; then
+    echo "Resuming from marker file..."
+else
+    # Prompt for confirmation before proceeding
+    read -p "Do you want to continue with the setup? (yes/no): " CONFIRMATION
 
-# Check the user's response
-if [[ "$CONFIRMATION" != "yes" ]]; then
-    echo "Setup aborted by the user."
-    exit 1
-fi
+    # Check the user's response
+    if [[ "$CONFIRMATION" != "yes" ]]; then
+        echo "Setup aborted by the user."
+        exit 1
+    fi
 
-# Create the log file if it does not exist
-if [ ! -f $LOG_FILE ]; then
-    touch $LOG_FILE
-fi
-
-# Function to log progress
-log_progress() {
-    echo "$1" >> $LOG_FILE
-}
-
-# Function to check if a step is complete
-is_step_complete() {
-    grep -q "$1" $LOG_FILE
-}
-
-# Check and create user
-if ! is_step_complete "User creation completed"; then
     # Check if user already exists
     if id "$USERNAME" &>/dev/null; then
         echo "User '$USERNAME' already exists."
@@ -53,18 +40,9 @@ if ! is_step_complete "User creation completed"; then
         sudo adduser $USERNAME
         sudo usermod -aG sudo $USERNAME
         echo "User '$USERNAME' created and added to the sudo group."
-        log_progress "User creation completed"
     fi
-fi
 
-# Pause for one second
-if ! is_step_complete "Update and upgrade completed"; then
-    echo "Pausing for 1 second before update and upgrade..."
-    sleep 1
-fi
-
-# Switch to the user and set the hostname
-if ! is_step_complete "Hostname set"; then
+    # Switch to the user and set the hostname
     echo "Switching to user '$USERNAME' to set the hostname..."
     sudo -u $USERNAME bash <<EOF
         # Check and set hostname if necessary
@@ -77,38 +55,37 @@ if ! is_step_complete "Hostname set"; then
             echo "Hostname is already set to '$HOSTNAME'."
         fi
 EOF
-    log_progress "Hostname set"
+# Copy git clone from original user to new user and delete old directory.
+sudo cp -r /home/$ORIGINALUSER/first_install ~/first_install
+sudo rm -r /home/$ORIGINALUSER/first_install
+
+    # Create marker file
+    touch "$MARKER_FILE"
 fi
 
-# Update and upgrade system
-if ! is_step_complete "Update and upgrade completed"; then
-    echo "Updating and upgrading system..."
-    sudo apt update -y
-    sudo apt upgrade -y
-    log_progress "Update and upgrade completed"
-fi
+# Proceed with the remaining setup
+echo "Updating and upgrading system..."
+sudo apt update -y
+sudo apt upgrade -y
 
-# Check if zsh is installed and install if necessary
-if ! is_step_complete "zsh installation completed"; then
-    if ! command -v zsh &>/dev/null; then
-        echo "Installing zsh..."
-        sudo apt install -y zsh
-    else
-        echo "zsh is already installed."
-    fi
-    log_progress "zsh installation completed"
+# Check if zsh is installed
+if ! command -v zsh &>/dev/null; then
+    echo "Installing zsh..."
+    sudo apt install -y zsh
+else
+    echo "zsh is already installed."
 fi
 
 # Change shell to zsh for the user
-if ! is_step_complete "Shell change completed"; then
-    echo "Changing default shell to zsh for user '$USERNAME'..."
-    sudo chsh -s /usr/bin/zsh $USERNAME
+echo "Changing default shell to zsh for user '$USERNAME'..."
+sudo chsh -s /usr/bin/zsh $USERNAME
 
-    # Optional: Set zsh as the default shell for the current user
-    if [[ "$USER" == "$USERNAME" ]]; then
-        chsh -s /usr/bin/zsh
-    fi
-    log_progress "Shell change completed"
+# Optional: Set zsh as the default shell for the current user
+if [[ "$USER" == "$USERNAME" ]]; then
+    chsh -s /usr/bin/zsh
 fi
+
+# Clean up marker file (optional)
+rm -f "$MARKER_FILE"
 
 echo "Step 1 of the setup is complete. Please log out and run install.sh again for changes to take effect and to finish install"
